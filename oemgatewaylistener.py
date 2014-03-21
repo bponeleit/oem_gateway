@@ -11,6 +11,7 @@ import serial
 import time, datetime
 import logging
 import socket, select
+import re
 
 """class OemGatewayListener
 
@@ -441,6 +442,79 @@ class OemGatewayRFM2PiListenerRepeater(OemGatewayRFM2PiListener):
             f, self._sock_rx_buf = self._sock_rx_buf.split('\r\n', 1)
             self._log.info("Sending frame: %s", f)
             self._ser.write(f)
+
+"""class OemGatewaySmartMeterListener
+
+Reads data from smart meter on serial port
+
+"""
+
+class OemGatewaySmartMeterListener(OemGatewaySerialListener):
+
+    def __init__(self, com_port, option_select, obis_codes, id):
+        """
+        Initialize listener
+        """
+        super(OemGatewaySmartMeterListener, self).__init__(com_port)
+        self._request_message = "/?!\r\n"
+        self._option_select = option_select
+        self._id = id
+        self._pattern = re.compile( r'(\d+-\d+:)?(\w+\.\w+.\d+)(\*\d+)?\((\w+(?:\.\w+)?)(\*)?([A-Za-z]+)?.*' )
+        self._obis_codes = obis_codes
+
+    def read(self):
+        """
+        read data set
+        """
+        self._rx_buf = ""
+        self._ser.write(self._request_message)
+
+        self._id = self._ser.readline().rstrip
+
+        self._ser.write(self._option_select)
+
+        # Read serial RX
+        while "\003" not in self._rx_buf:
+            self._rx_buf = self._rx_buf + self._ser.read()
+
+        self._ser.read()            
+
+    def _process_frame(self, f):
+        """Process a frame of data
+
+        f (string): 'NodeID val1 val2 ...'
+
+        This function splits the string into numbers and check its validity.
+
+        'NodeID val1 val2 ...' is the generic data format. If the source uses 
+        a different format, override this method.
+        
+        Return data as a list: [NodeID, val1, val2]
+
+        """
+
+        # Log data
+        self._log.info("Serial RX: " + f)
+        
+        # Get an array out of the space separated string
+        received = f.strip().splitlines()
+        
+        # Discard if frame not of the form [node, val1, ...]
+        # with number of elements at least 2
+        if (len(received) < 2):
+            self._log.warning("Misformed RX frame: " + str(received))
+        
+        # Else, process frame
+        else:
+            try:
+                received = self._id + [float(val[1]) for val in (match.group( 2, 4 ) for match in filter(bool, map(pattern.match, received.splitlines()))) if val[0] in obis_codes]
+                #received = [float(val) for val in received]
+            except Exception:
+                self._log.warning("Misformed RX frame: " + str(received))
+            else:
+                self._log.debug("Node: " + str(received[0]))
+                self._log.debug("Values: " + str(received[1:]))
+                return received
 
 """class OemGatewayListenerInitError
 
