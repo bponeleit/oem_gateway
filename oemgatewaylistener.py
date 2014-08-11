@@ -104,7 +104,12 @@ class OemGatewayListener(object):
         self._log.debug('Opening serial port: %s', com_port)
         
         try:
-            s = serial.Serial(com_port, 9600, timeout = 0)
+            s = serial.Serial(port = com_port, 
+                baudrate = 300,
+                parity=serial.PARITY_EVEN,
+                stopbits=serial.STOPBITS_ONE,
+                bytesize=serial.SEVENBITS,
+                timeout = 10)
         except serial.SerialException as e:
             self._log.error(e)
             raise OemGatewayListenerInitError('Could not open COM port %s' %
@@ -451,14 +456,14 @@ Reads data from smart meter on serial port
 
 class OemGatewaySmartMeterListener(OemGatewaySerialListener):
 
-    def __init__(self, com_port, option_select, obis_codes, id):
+    def __init__(self, com_port, option_select, obis_codes, node_id):
         """
         Initialize listener
         """
         super(OemGatewaySmartMeterListener, self).__init__(com_port)
         self._request_message = "/?!\r\n"
         self._option_select = option_select
-        self._id = id
+        self._node_id = node_id
         self._pattern = re.compile( r'(\d+-\d+:)?(\w+\.\w+.\d+)(\*\d+)?\((\w+(?:\.\w+)?)(\*)?([A-Za-z]+)?.*' )
         self._obis_codes = obis_codes
 
@@ -468,16 +473,25 @@ class OemGatewaySmartMeterListener(OemGatewaySerialListener):
         """
         self._rx_buf = ""
         self._ser.write(self._request_message)
+	time.sleep(0.5)
 
-        self._id = self._ser.readline().rstrip
+        self._id = self._ser.readline().rstrip()
+        self._log.debug("ID: " + self._id)
 
-        self._ser.write(self._option_select)
+        self._ser.write(self._option_select.decode("string-escape"))
+        #self._log.debug(self._option_select.decode("string-escape"))
+        #self._log.debug(self._option_select)
 
         # Read serial RX
         while "\003" not in self._rx_buf:
+            #self._log.debug("_rx_buf: " + self._rx_buf)
             self._rx_buf = self._rx_buf + self._ser.read()
 
-        self._ser.read()            
+	self._log.debug(self._rx_buf)
+        self._ser.read()
+        
+        f = self._rx_buf[:-2]
+        return self._process_frame(f)            
 
     def _process_frame(self, f):
         """Process a frame of data
@@ -502,15 +516,25 @@ class OemGatewaySmartMeterListener(OemGatewaySerialListener):
         # Discard if frame not of the form [node, val1, ...]
         # with number of elements at least 2
         if (len(received) < 2):
-            self._log.warning("Misformed RX frame: " + str(received))
+            self._log.warning("1 Misformed RX frame: " + str(received))
         
         # Else, process frame
         else:
             try:
-                received = self._id + [float(val[1]) for val in (match.group( 2, 4 ) for match in filter(bool, map(pattern.match, received.splitlines()))) if val[0] in obis_codes]
+                self._log.debug("Begin process")
+                #self._log.debug(self._obis_codes)
+                #test1 = [self._pattern.match( line ) for line in f.strip().splitlines()]
+                #self._log.debug(test1)
+                #test = [val.group( 2, 4 ) for val in test1 if val <> None]
+                #self._log.debug(test)
+                #test2 = [val[1] for val in test if val[0] in self._obis_codes]
+                #self._log.debug(test2)
+                received = [str(self._node_id)]
+                received.extend([float(val[1]) for val in (match.group( 2, 4 ) for match in filter(bool, map(self._pattern.match, f.strip().splitlines()))) if val[0] in self._obis_codes])
                 #received = [float(val) for val in received]
-            except Exception:
+            except Exception, e:
                 self._log.warning("Misformed RX frame: " + str(received))
+                self._log.warning(str(e))
             else:
                 self._log.debug("Node: " + str(received[0]))
                 self._log.debug("Values: " + str(received[1:]))
