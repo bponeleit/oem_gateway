@@ -157,4 +157,28 @@ class OemGatewayEmoncmsBuffer(OemGatewayBuffer):
                 return True
             else:
                 self._log.warning("Send failure")
+       
+class OemGatewaySmartmeterBuffer(OemGatewayEmoncmsBuffer):        
+
+    def flush(self):
+        """Send oldest data in buffer, if any."""
         
+        # Buffer management
+        # If data buffer not empty, send a set of values
+        while self._data_buffer != []:
+            time, data = self._data_buffer[0]
+            self._log.debug("Server " + 
+                           self._settings['domain'] + self._settings['path'] + 
+                           " -> send data: " + str(data) + 
+                           ", timestamp: " + str(time))
+            if self._send_data(data, time):
+                # In case of success, delete sample set from buffer
+                del self._data_buffer[0]
+            else:
+                self._log.debug("send failure")
+                break
+        # If buffer size reaches maximum, trash oldest values
+        # TODO: optionnal write to file instead of losing data
+        size = len(self._data_buffer)
+        if size > 1000:
+            self._data_buffer = self._data_buffer[size - 1000:]     

@@ -483,9 +483,13 @@ class OemGatewaySmartMeterListener(OemGatewaySerialListener):
         #self._log.debug(self._option_select)
 
         # Read serial RX
+        reads = 0
         while "\003" not in self._rx_buf:
+            reads += 1
             #self._log.debug("_rx_buf: " + self._rx_buf)
             self._rx_buf = self._rx_buf + self._ser.read()
+            if reads > 300:
+                break
 
 	self._log.debug(self._rx_buf)
         self._ser.read()
