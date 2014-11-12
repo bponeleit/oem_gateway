@@ -91,7 +91,7 @@ class OemGateway(object):
                 b.flush()
 
             # Sleep until next iteration
-            time.sleep(0.2);
+            #time.sleep(0.2);
          
     def close(self):
         """Close gateway. Do some cleanup before leaving."""
