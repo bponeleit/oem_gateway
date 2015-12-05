@@ -10,6 +10,7 @@
 import urllib2, httplib
 import time
 import logging
+import json
 
 """class OemGatewayBuffer
 
@@ -67,6 +68,8 @@ class OemGatewayBuffer(object):
         # Append data set [timestamp, [node, val1, val2, val3,...]] 
         # to _data_buffer
         self._data_buffer.append([t, data])
+        with open('/usr/local/oem_gateway/buffer', 'w') as f:
+            json.dump(self._data_buffer, f)
 
     def _send_data(self, data, time):
         """Send data to server.
@@ -160,6 +163,11 @@ class OemGatewayEmoncmsBuffer(OemGatewayBuffer):
        
 class OemGatewaySmartmeterBuffer(OemGatewayEmoncmsBuffer):        
 
+    def __init__(self):
+        OemGatewayEmoncmsBuffer.__init__(self)
+        with open('/usr/local/oem_gateway/buffer', 'r') as f:
+            self._data_buffer = json.load(f)
+
     def flush(self):
         """Send oldest data in buffer, if any."""
         
@@ -174,11 +182,13 @@ class OemGatewaySmartmeterBuffer(OemGatewayEmoncmsBuffer):
             if self._send_data(data, time):
                 # In case of success, delete sample set from buffer
                 del self._data_buffer[0]
+                with open('/usr/local/oem_gateway/buffer', 'w') as f:
+                    json.dump(self._data_buffer, f)
             else:
                 self._log.debug("send failure")
                 break
         # If buffer size reaches maximum, trash oldest values
         # TODO: optionnal write to file instead of losing data
         size = len(self._data_buffer)
-        if size > 1000:
+        if size > 10000:
             self._data_buffer = self._data_buffer[size - 1000:]     
