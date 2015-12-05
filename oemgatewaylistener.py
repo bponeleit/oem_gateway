@@ -471,7 +471,7 @@ class OemGatewaySmartMeterListener(OemGatewaySerialListener):
         """
         read data set
         """
-        self._rx_buf = ""
+        self._rx_buf = ''
         self._ser.write(self._request_message)
 	time.sleep(0.5)
 
